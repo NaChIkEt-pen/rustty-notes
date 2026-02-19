@@ -35,18 +35,15 @@ fn app(terminal: &mut DefaultTerminal) -> std::io::Result<()> {
 }
 
 fn render(frame: &mut Frame, state: &mut EditorState) {
-    let [border_area] = Layout::vertical([Constraint::Fill(1)])
-        .margin(1)
-        .areas(frame.area());
+    let [left, right] =
+        Layout::horizontal([Constraint::Percentage(20), Constraint::Percentage(80)])
+            .areas(frame.area());
 
-    let [inner_area_left] = Layout::vertical([Constraint::Fill(1)])
-        .margin(1)
-        .areas(border_area);
-
-    Block::bordered()
+    let border_area = Block::bordered()
         .border_type(BorderType::Rounded)
-        .fg(Color::Red)
-        .render(border_area, frame.buffer_mut());
+        .fg(Color::Red);
+
+    let inner_area = border_area.inner(right);
 
     let theme = EditorTheme::default()
         .base(Style::default().bg(Color::Reset).fg(Color::Reset))
@@ -59,5 +56,7 @@ fn render(frame: &mut Frame, state: &mut EditorState) {
         .wrap(true)
         .syntax_highlighter(None)
         .tab_width(2)
-        .render(inner_area_left, frame.buffer_mut());
+        .render(inner_area, frame.buffer_mut());
+
+    frame.render_widget(border_area, right);
 }
