@@ -1,7 +1,7 @@
-use edtui::{EditorEventHandler, EditorState, EditorTheme, EditorView};
+use edtui::{EditorEventHandler, EditorState, EditorTheme, EditorView, LineNumbers};
 use ratatui::{
     layout::{Constraint, Layout},
-    style::{Color, Stylize},
+    style::{Color, Style, Stylize},
     widgets::{Block, BorderType, Widget},
     DefaultTerminal, Frame,
 };
@@ -48,12 +48,16 @@ fn render(frame: &mut Frame, state: &mut EditorState) {
         .fg(Color::Red)
         .render(border_area, frame.buffer_mut());
 
+    let theme = EditorTheme::default()
+        .base(Style::default().bg(Color::Reset).fg(Color::Reset))
+        .cursor_style(Style::default().bg(Color::White).fg(Color::Black))
+        .line_numbers_style(Style::default().fg(Color::Gray));
+
     EditorView::new(state)
-        .theme(EditorTheme::default())
+        .theme(theme)
+        .line_numbers(LineNumbers::Absolute)
         .wrap(true)
         .syntax_highlighter(None)
         .tab_width(2)
         .render(inner_area_left, frame.buffer_mut());
-
-    //frame.render_widget("hello world", inner_area_left);
 }
