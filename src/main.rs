@@ -1,7 +1,9 @@
-use edtui::{EditorEventHandler, EditorState, EditorTheme, EditorView, LineNumbers};
+use edtui::{
+    EditorEventHandler, EditorState, EditorTheme, EditorView, LineNumbers, SyntaxHighlighter,
+};
 use ratatui::{
     layout::{Constraint, Layout},
-    style::{Color, Style, Stylize},
+    style::{Color, Style},
     widgets::{Block, BorderType, Widget},
     DefaultTerminal, Frame,
 };
@@ -22,9 +24,8 @@ fn app(terminal: &mut DefaultTerminal) -> std::io::Result<()> {
         let event = crossterm::event::read()?;
         if event.is_key_press() {
             if let crossterm::event::Event::Key(key_event) = event {
-                if key_event.code == crossterm::event::KeyCode::Esc
-                    || (key_event.code == crossterm::event::KeyCode::Char('q')
-                        && key_event.modifiers == crossterm::event::KeyModifiers::CONTROL)
+                if key_event.code == crossterm::event::KeyCode::Char('q')
+                    && key_event.modifiers == crossterm::event::KeyModifiers::CONTROL
                 {
                     break Ok(());
                 }
@@ -35,15 +36,17 @@ fn app(terminal: &mut DefaultTerminal) -> std::io::Result<()> {
 }
 
 fn render(frame: &mut Frame, state: &mut EditorState) {
-    let [left, right] =
+    let [left, editor_area] =
         Layout::horizontal([Constraint::Percentage(20), Constraint::Percentage(80)])
             .areas(frame.area());
 
     let border_area = Block::bordered()
         .border_type(BorderType::Rounded)
-        .fg(Color::Red);
+        .border_style(Style::default().fg(Color::Red));
 
-    let inner_area = border_area.inner(right);
+    let editor_inner_area = border_area.inner(editor_area);
+
+    let syntax_highlighter = SyntaxHighlighter::new("OneHalfDark", "md");
 
     let theme = EditorTheme::default()
         .base(Style::default().bg(Color::Reset).fg(Color::Reset))
@@ -54,9 +57,9 @@ fn render(frame: &mut Frame, state: &mut EditorState) {
         .theme(theme)
         .line_numbers(LineNumbers::Absolute)
         .wrap(true)
-        .syntax_highlighter(None)
+        .syntax_highlighter(Some(syntax_highlighter.unwrap()))
         .tab_width(2)
-        .render(inner_area, frame.buffer_mut());
+        .render(editor_inner_area, frame.buffer_mut());
 
-    frame.render_widget(border_area, right);
+    frame.render_widget(border_area, editor_area);
 }
