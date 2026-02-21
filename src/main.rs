@@ -1,3 +1,6 @@
+#![allow(clippy::collapsible_if)]
+use std::{collections::HashMap, fs};
+
 use edtui::{
     EditorEventHandler, EditorState, EditorTheme, EditorView, LineNumbers, SyntaxHighlighter,
 };
@@ -22,14 +25,29 @@ fn main() -> color_eyre::Result<()> {
 }
 
 fn app(terminal: &mut DefaultTerminal) -> std::io::Result<()> {
-    let mut focus = Focus::Editor;
-    let mut state = EditorState::default();
+    let mut focus = Focus::Tree;
+    //let mut state = EditorState::default();
+    let mut editor_states: HashMap<&str, EditorState> = HashMap::new();
+    let mut current_tree_key: &str = "";
     let mut tree_state: TreeState<&str> = TreeState::default();
     let mut event_handler = EditorEventHandler::default();
     let mut last_key: Option<crossterm::event::KeyCode> = None;
     let mut choose_path_toogle = false;
+    let mut show_editor = false;
     loop {
-        terminal.draw(|frame| render(frame, &mut state, &mut tree_state, choose_path_toogle))?;
+        let mut state = editor_states
+            .entry(current_tree_key)
+            .or_insert_with(EditorState::default);
+
+        terminal.draw(|frame| {
+            render(
+                frame,
+                &mut state,
+                &mut tree_state,
+                choose_path_toogle,
+                show_editor,
+            )
+        })?;
 
         let event = crossterm::event::read()?;
 
@@ -43,10 +61,14 @@ fn app(terminal: &mut DefaultTerminal) -> std::io::Result<()> {
                     continue;
                 }
 
-                if key_event.code == crossterm::event::KeyCode::Char('q')
-                    && key_event.modifiers == crossterm::event::KeyModifiers::CONTROL
-                {
-                    break Ok(());
+                if key_event.modifiers == crossterm::event::KeyModifiers::CONTROL {
+                    if key_event.code == crossterm::event::KeyCode::Char('q') {
+                        break Ok(());
+                    }
+                    if key_event.code == crossterm::event::KeyCode::Char('s') {
+                        let file_name = format! {"{}.md", current_tree_key};
+                        fs::write(file_name, state.lines.to_string())?;
+                    }
                 }
 
                 if key_event.code == crossterm::event::KeyCode::Esc {
@@ -56,7 +78,13 @@ fn app(terminal: &mut DefaultTerminal) -> std::io::Result<()> {
                         last_key = None;
                         event_handler.on_key_event(key_event, &mut state);
                         terminal.draw(|frame| {
-                            render(frame, &mut state, &mut tree_state, choose_path_toogle)
+                            render(
+                                frame,
+                                &mut state,
+                                &mut tree_state,
+                                choose_path_toogle,
+                                show_editor,
+                            )
                         })?;
                         continue;
                     }
@@ -68,7 +96,13 @@ fn app(terminal: &mut DefaultTerminal) -> std::io::Result<()> {
                                 choose_path_toogle = true;
                                 last_key = None;
                                 terminal.draw(|frame| {
-                                    render(frame, &mut state, &mut tree_state, choose_path_toogle)
+                                    render(
+                                        frame,
+                                        &mut state,
+                                        &mut tree_state,
+                                        choose_path_toogle,
+                                        show_editor,
+                                    )
                                 })?;
                                 continue;
                             } else {
@@ -93,7 +127,10 @@ fn app(terminal: &mut DefaultTerminal) -> std::io::Result<()> {
                         }
                         crossterm::event::KeyCode::Enter => {
                             tree_state.toggle_selected();
-                            state = EditorState::default();
+                            if let Some(selected) = tree_state.selected().first() {
+                                current_tree_key = selected;
+                                show_editor = true;
+                            }
                         }
                         _ => {}
                     }
@@ -107,7 +144,8 @@ fn render(
     frame: &mut Frame,
     state: &mut EditorState,
     tree_state: &mut TreeState<&str>,
-    choose_path_toogle: bool,
+    _choose_path_toogle: bool,
+    show_editor: bool,
 ) {
     let [left, editor_area] =
         Layout::horizontal([Constraint::Percentage(20), Constraint::Percentage(80)])
@@ -126,27 +164,27 @@ fn render(
         .block(Block::bordered().title("Tree Widget"));
     frame.render_stateful_widget(tree_widget, left, tree_state);
     //}
+    if show_editor {
+        let border_area = Block::bordered()
+            .border_type(BorderType::Rounded)
+            .border_style(Style::default().fg(Color::Red));
 
-    let border_area = Block::bordered()
-        .border_type(BorderType::Rounded)
-        .border_style(Style::default().fg(Color::Red));
+        let editor_inner_area = border_area.inner(editor_area);
 
-    let editor_inner_area = border_area.inner(editor_area);
+        let syntax_highlighter = SyntaxHighlighter::new("OneHalfDark", "md");
 
-    let syntax_highlighter = SyntaxHighlighter::new("OneHalfDark", "md");
+        let theme = EditorTheme::default()
+            .base(Style::default().bg(Color::Reset).fg(Color::Reset))
+            .cursor_style(Style::default().bg(Color::White).fg(Color::Black))
+            .line_numbers_style(Style::default().fg(Color::Gray));
 
-    let theme = EditorTheme::default()
-        .base(Style::default().bg(Color::Reset).fg(Color::Reset))
-        .cursor_style(Style::default().bg(Color::White).fg(Color::Black))
-        .line_numbers_style(Style::default().fg(Color::Gray));
-
-    EditorView::new(state)
-        .theme(theme)
-        .line_numbers(LineNumbers::Absolute)
-        .wrap(true)
-        .syntax_highlighter(Some(syntax_highlighter.unwrap()))
-        .tab_width(2)
-        .render(editor_inner_area, frame.buffer_mut());
-
-    frame.render_widget(border_area, editor_area);
+        EditorView::new(state)
+            .theme(theme)
+            .line_numbers(LineNumbers::Absolute)
+            .wrap(true)
+            .syntax_highlighter(Some(syntax_highlighter.unwrap()))
+            .tab_width(2)
+            .render(editor_inner_area, frame.buffer_mut());
+        frame.render_widget(border_area, editor_area);
+    }
 }
