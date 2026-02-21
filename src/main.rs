@@ -17,9 +17,10 @@ fn main() -> color_eyre::Result<()> {
 fn app(terminal: &mut DefaultTerminal) -> std::io::Result<()> {
     let mut state = EditorState::default();
     let mut event_handler = EditorEventHandler::default();
-
+    let mut last_key: Option<crossterm::event::KeyCode> = None;
+    let mut choose_path_toogle = false;
     loop {
-        terminal.draw(|frame| render(frame, &mut state))?;
+        terminal.draw(|frame| render(frame, &mut state, choose_path_toogle))?;
 
         let event = crossterm::event::read()?;
         if event.is_key_press() {
@@ -29,16 +30,53 @@ fn app(terminal: &mut DefaultTerminal) -> std::io::Result<()> {
                 {
                     break Ok(());
                 }
+                if key_event.code == crossterm::event::KeyCode::Esc {
+                    last_key = None;
+                    if choose_path_toogle {
+                        choose_path_toogle = false;
+                        last_key = None;
+                        event_handler.on_key_event(key_event, &mut state);
+                        terminal.draw(|frame| render(frame, &mut state, choose_path_toogle))?;
+                        continue;
+                    }
+                }
+
+                if state.mode == edtui::EditorMode::Normal {
+                    if key_event.code == crossterm::event::KeyCode::Char('f') {
+                        if last_key == Some(crossterm::event::KeyCode::Char('f')) {
+                            choose_path_toogle = true;
+                            last_key = None;
+                            terminal.draw(|frame| render(frame, &mut state, choose_path_toogle))?;
+                            continue;
+                        } else {
+                            last_key = Some(key_event.code);
+                            continue;
+                        }
+                    } else {
+                        last_key = None;
+                    }
+                } else {
+                    last_key = None;
+                }
+
                 event_handler.on_key_event(key_event, &mut state);
             }
         }
     }
 }
 
-fn render(frame: &mut Frame, state: &mut EditorState) {
+fn render(frame: &mut Frame, state: &mut EditorState, choose_path_toogle: bool) {
     let [left, editor_area] =
         Layout::horizontal([Constraint::Percentage(20), Constraint::Percentage(80)])
             .areas(frame.area());
+
+    if choose_path_toogle {
+        let left_block = Block::bordered()
+            .border_type(BorderType::Rounded)
+            .title("Panel")
+            .border_style(Style::default().fg(Color::Blue));
+        frame.render_widget(left_block, left);
+    }
 
     let border_area = Block::bordered()
         .border_type(BorderType::Rounded)
