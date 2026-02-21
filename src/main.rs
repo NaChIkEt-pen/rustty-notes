@@ -26,7 +26,6 @@ fn main() -> color_eyre::Result<()> {
 
 fn app(terminal: &mut DefaultTerminal) -> std::io::Result<()> {
     let mut focus = Focus::Tree;
-    //let mut state = EditorState::default();
     let mut editor_states: HashMap<&str, EditorState> = HashMap::new();
     let mut current_tree_key: &str = "";
     let mut tree_state: TreeState<&str> = TreeState::default();
