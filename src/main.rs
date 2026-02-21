@@ -33,6 +33,7 @@ fn app(terminal: &mut DefaultTerminal) -> std::io::Result<()> {
     let mut last_key: Option<crossterm::event::KeyCode> = None;
     let mut choose_path_toogle = false;
     let mut show_editor = false;
+    let mut preview_mode = false;
     loop {
         let mut state = editor_states
             .entry(current_tree_key)
@@ -45,6 +46,7 @@ fn app(terminal: &mut DefaultTerminal) -> std::io::Result<()> {
                 &mut tree_state,
                 choose_path_toogle,
                 show_editor,
+                preview_mode,
             )
         })?;
 
@@ -63,10 +65,11 @@ fn app(terminal: &mut DefaultTerminal) -> std::io::Result<()> {
                 if key_event.modifiers == crossterm::event::KeyModifiers::CONTROL {
                     if key_event.code == crossterm::event::KeyCode::Char('q') {
                         break Ok(());
-                    }
-                    if key_event.code == crossterm::event::KeyCode::Char('s') {
+                    } else if key_event.code == crossterm::event::KeyCode::Char('s') {
                         let file_name = format! {"{}.md", current_tree_key};
                         fs::write(file_name, state.lines.to_string())?;
+                    } else if key_event.code == crossterm::event::KeyCode::Char('p') {
+                        preview_mode = !preview_mode;
                     }
                 }
 
@@ -83,6 +86,7 @@ fn app(terminal: &mut DefaultTerminal) -> std::io::Result<()> {
                                 &mut tree_state,
                                 choose_path_toogle,
                                 show_editor,
+                                preview_mode,
                             )
                         })?;
                         continue;
@@ -101,6 +105,7 @@ fn app(terminal: &mut DefaultTerminal) -> std::io::Result<()> {
                                         &mut tree_state,
                                         choose_path_toogle,
                                         show_editor,
+                                        preview_mode,
                                     )
                                 })?;
                                 continue;
@@ -145,6 +150,7 @@ fn render(
     tree_state: &mut TreeState<&str>,
     _choose_path_toogle: bool,
     show_editor: bool,
+    preview_mode: bool,
 ) {
     let [left, editor_area] =
         Layout::horizontal([Constraint::Percentage(20), Constraint::Percentage(80)])
@@ -162,28 +168,38 @@ fn render(
         .highlight_symbol(">> ")
         .block(Block::bordered().title("Tree Widget"));
     frame.render_stateful_widget(tree_widget, left, tree_state);
+
     //}
     if show_editor {
-        let border_area = Block::bordered()
-            .border_type(BorderType::Rounded)
-            .border_style(Style::default().fg(Color::Red));
+        if !preview_mode {
+            let border_area = Block::bordered()
+                .border_type(BorderType::Rounded)
+                .border_style(Style::default().fg(Color::Red));
 
-        let editor_inner_area = border_area.inner(editor_area);
+            let editor_inner_area = border_area.inner(editor_area);
 
-        let syntax_highlighter = SyntaxHighlighter::new("OneHalfDark", "md");
+            let syntax_highlighter = SyntaxHighlighter::new("OneHalfDark", "md");
 
-        let theme = EditorTheme::default()
-            .base(Style::default().bg(Color::Reset).fg(Color::Reset))
-            .cursor_style(Style::default().bg(Color::White).fg(Color::Black))
-            .line_numbers_style(Style::default().fg(Color::Gray));
+            let theme = EditorTheme::default()
+                .base(Style::default().bg(Color::Reset).fg(Color::Reset))
+                .cursor_style(Style::default().bg(Color::White).fg(Color::Black))
+                .line_numbers_style(Style::default().fg(Color::Gray));
 
-        EditorView::new(state)
-            .theme(theme)
-            .line_numbers(LineNumbers::Absolute)
-            .wrap(true)
-            .syntax_highlighter(Some(syntax_highlighter.unwrap()))
-            .tab_width(2)
-            .render(editor_inner_area, frame.buffer_mut());
-        frame.render_widget(border_area, editor_area);
+            EditorView::new(state)
+                .theme(theme)
+                .line_numbers(LineNumbers::Absolute)
+                .wrap(true)
+                .syntax_highlighter(Some(syntax_highlighter.unwrap()))
+                .tab_width(2)
+                .render(editor_inner_area, frame.buffer_mut());
+            frame.render_widget(border_area, editor_area);
+        } else if preview_mode {
+            let content = state.lines.to_string();
+            let skin = termimad::MadSkin::default();
+            let rendered = skin.term_text(content.as_str()).to_string();
+            let paragraph = ratatui::widgets::Paragraph::new(rendered)
+                .wrap(ratatui::widgets::Wrap { trim: false });
+            frame.render_widget(paragraph, editor_area);
+        }
     }
 }
