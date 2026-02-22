@@ -4,9 +4,7 @@
 use std::{collections::HashMap, fs};
 
 use clap::Parser;
-use edtui::{
-    EditorEventHandler, EditorState, EditorTheme, EditorView, LineNumbers, SyntaxHighlighter,
-};
+use edtui::{EditorEventHandler, EditorTheme, EditorView, LineNumbers, SyntaxHighlighter};
 use ratatui::{
     layout::{Constraint, Layout},
     style::{Color, Style},
@@ -36,10 +34,6 @@ fn main() -> color_eyre::Result<()> {
         parent_path: Some(args.path.unwrap_or_else(|| std::path::PathBuf::from("."))),
     };
 
-    for entry in fs::read_dir(app_state.parent_path.as_ref().unwrap())? {
-        let dir = entry?;
-        println!("{:?}, is dir {:?}", dir.path(), dir.path().is_dir());
-    }
     color_eyre::install()?;
     ratatui::run(|terminal| app(terminal, app_state))?;
     Ok(())
@@ -54,6 +48,13 @@ fn app(terminal: &mut DefaultTerminal, mut app_state: AppState) -> std::io::Resu
         if event.is_key_press() {
             if let crossterm::event::Event::Key(key_event) = event {
                 if key_event.code == crossterm::event::KeyCode::Tab {
+                    if !app_state.show_editor {
+                        app_state.focus = match app_state.focus {
+                            Focus::Tree => Focus::Tree,
+                            Focus::Editor => Focus::Tree,
+                        };
+                        continue;
+                    }
                     app_state.focus = match app_state.focus {
                         Focus::Editor => Focus::Tree,
                         Focus::Tree => Focus::Editor,
@@ -65,7 +66,7 @@ fn app(terminal: &mut DefaultTerminal, mut app_state: AppState) -> std::io::Resu
                     if key_event.code == crossterm::event::KeyCode::Char('q') {
                         break Ok(());
                     } else if key_event.code == crossterm::event::KeyCode::Char('s') {
-                        let file_name = format!("{}", app_state.current_tree_key);
+                        let file_name = app_state.current_tree_key.as_str();
                         let content = app_state
                             .editor_states
                             .get(&app_state.current_tree_key)
@@ -148,12 +149,27 @@ fn render(frame: &mut Frame, app_state: &mut AppState) {
                 .collect()
         })
         .unwrap_or_default();
+    let tree_border_color = if app_state.focus == Focus::Tree {
+        Color::Blue
+    } else {
+        Color::DarkGray
+    };
+    let editor_border_color = if app_state.focus == Focus::Editor {
+        Color::Red
+    } else {
+        Color::DarkGray
+    };
 
     let tree_widget = Tree::new(&items)
         .expect("all item identifiers are unique")
-        .highlight_style(Style::default().fg(Color::Black).bg(Color::White))
+        .highlight_style(Style::default().fg(Color::Black).bg(Color::Blue))
         .highlight_symbol(">> ")
-        .block(Block::bordered().title("Tree Widget"));
+        .block(
+            Block::bordered()
+                .title("Tree Widget")
+                .border_type(BorderType::Rounded)
+                .border_style(Style::default().fg(tree_border_color)),
+        );
     frame.render_stateful_widget(tree_widget, left, &mut app_state.tree_state);
 
     if app_state.show_editor {
@@ -165,7 +181,7 @@ fn render(frame: &mut Frame, app_state: &mut AppState) {
         if !app_state.preview_mode {
             let border_area = Block::bordered()
                 .border_type(BorderType::Rounded)
-                .border_style(Style::default().fg(Color::Red));
+                .border_style(Style::default().fg(editor_border_color));
             let editor_inner_area = border_area.inner(editor_area);
 
             let syntax_highlighter = SyntaxHighlighter::new("OneHalfDark", "md");
