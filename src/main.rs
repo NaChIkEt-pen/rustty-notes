@@ -47,20 +47,7 @@ fn main() -> color_eyre::Result<()> {
 
 fn app(terminal: &mut DefaultTerminal, mut app_state: AppState) -> std::io::Result<()> {
     loop {
-        let mut state = app_state
-            .editor_states
-            .entry(app_state.current_tree_key.clone())
-            .or_default();
-
-        terminal.draw(|frame| {
-            render(
-                frame,
-                &mut state,
-                &mut app_state.tree_state,
-                app_state.show_editor,
-                app_state.preview_mode,
-            )
-        })?;
+        terminal.draw(|frame| render(frame, &mut app_state))?;
 
         let event = crossterm::event::read()?;
 
@@ -78,8 +65,13 @@ fn app(terminal: &mut DefaultTerminal, mut app_state: AppState) -> std::io::Resu
                     if key_event.code == crossterm::event::KeyCode::Char('q') {
                         break Ok(());
                     } else if key_event.code == crossterm::event::KeyCode::Char('s') {
-                        let file_name = format! {"{}.md", app_state.current_tree_key};
-                        fs::write(file_name, state.lines.to_string())?;
+                        let file_name = format!("{}", app_state.current_tree_key);
+                        let content = app_state
+                            .editor_states
+                            .get(&app_state.current_tree_key)
+                            .map(|s| s.lines.to_string())
+                            .unwrap_or_default();
+                        fs::write(file_name, content)?;
                     } else if key_event.code == crossterm::event::KeyCode::Char('p') {
                         app_state.preview_mode = !app_state.preview_mode;
                     }
@@ -87,37 +79,20 @@ fn app(terminal: &mut DefaultTerminal, mut app_state: AppState) -> std::io::Resu
 
                 if key_event.code == crossterm::event::KeyCode::Esc {
                     app_state.last_key = None;
-                    if app_state.choose_path_toogle {
-                        app_state.choose_path_toogle = false;
-                        app_state.last_key = None;
-                        app_state.event_handler.on_key_event(key_event, &mut state);
-                        terminal.draw(|frame| {
-                            render(
-                                frame,
-                                &mut state,
-                                &mut app_state.tree_state,
-                                app_state.show_editor,
-                                app_state.preview_mode,
-                            )
-                        })?;
-                        continue;
-                    }
+                    app_state.choose_path_toogle = false;
                 }
+
                 if app_state.focus == Focus::Editor {
+                    let state = app_state
+                        .editor_states
+                        .entry(app_state.current_tree_key.clone())
+                        .or_default();
+
                     if state.mode == edtui::EditorMode::Normal {
                         if key_event.code == crossterm::event::KeyCode::Char('f') {
                             if app_state.last_key == Some(crossterm::event::KeyCode::Char('f')) {
                                 app_state.choose_path_toogle = true;
                                 app_state.last_key = None;
-                                terminal.draw(|frame| {
-                                    render(
-                                        frame,
-                                        &mut state,
-                                        &mut app_state.tree_state,
-                                        app_state.show_editor,
-                                        app_state.preview_mode,
-                                    )
-                                })?;
                                 continue;
                             } else {
                                 app_state.last_key = Some(key_event.code);
@@ -130,7 +105,7 @@ fn app(terminal: &mut DefaultTerminal, mut app_state: AppState) -> std::io::Resu
                         app_state.last_key = None;
                     }
 
-                    app_state.event_handler.on_key_event(key_event, &mut state);
+                    app_state.event_handler.on_key_event(key_event, state);
                 } else if app_state.focus == Focus::Tree {
                     match key_event.code {
                         crossterm::event::KeyCode::Down => {
@@ -144,6 +119,7 @@ fn app(terminal: &mut DefaultTerminal, mut app_state: AppState) -> std::io::Resu
                             if let Some(selected) = app_state.tree_state.selected().first() {
                                 app_state.current_tree_key = selected.to_string();
                                 app_state.show_editor = true;
+                                app_state.focus = Focus::Editor;
                             }
                         }
                         _ => {}
@@ -154,35 +130,42 @@ fn app(terminal: &mut DefaultTerminal, mut app_state: AppState) -> std::io::Resu
     }
 }
 
-fn render(
-    frame: &mut Frame,
-    state: &mut EditorState,
-    tree_state: &mut TreeState<String>,
-    show_editor: bool,
-    preview_mode: bool,
-) {
+fn render(frame: &mut Frame, app_state: &mut AppState) {
     let [left, editor_area] =
         Layout::horizontal([Constraint::Percentage(20), Constraint::Percentage(80)])
             .areas(frame.area());
 
-    let item = TreeItem::new_leaf("l".to_string(), "leaf");
-    let item2 = TreeItem::new_leaf("l2".to_string(), "leaf2");
-
-    let items = vec![item, item2];
+    let items: Vec<TreeItem<String>> = app_state
+        .parent_path
+        .as_ref()
+        .and_then(|p| fs::read_dir(p).ok())
+        .map(|rd| {
+            rd.filter_map(|entry| entry.ok())
+                .map(|entry| {
+                    let name = entry.file_name().to_string_lossy().to_string();
+                    TreeItem::new_leaf(name.clone(), name)
+                })
+                .collect()
+        })
+        .unwrap_or_default();
 
     let tree_widget = Tree::new(&items)
         .expect("all item identifiers are unique")
         .highlight_style(Style::default().fg(Color::Black).bg(Color::White))
         .highlight_symbol(">> ")
         .block(Block::bordered().title("Tree Widget"));
-    frame.render_stateful_widget(tree_widget, left, tree_state);
+    frame.render_stateful_widget(tree_widget, left, &mut app_state.tree_state);
 
-    if show_editor {
-        if !preview_mode {
+    if app_state.show_editor {
+        let state = app_state
+            .editor_states
+            .entry(app_state.current_tree_key.clone())
+            .or_default();
+
+        if !app_state.preview_mode {
             let border_area = Block::bordered()
                 .border_type(BorderType::Rounded)
                 .border_style(Style::default().fg(Color::Red));
-
             let editor_inner_area = border_area.inner(editor_area);
 
             let syntax_highlighter = SyntaxHighlighter::new("OneHalfDark", "md");
@@ -200,7 +183,7 @@ fn render(
                 .tab_width(2)
                 .render(editor_inner_area, frame.buffer_mut());
             frame.render_widget(border_area, editor_area);
-        } else if preview_mode {
+        } else if app_state.preview_mode {
             let content = state.lines.to_string();
             let skin = termimad::MadSkin::default();
             let rendered = skin.term_text(content.as_str()).to_string();
