@@ -49,7 +49,6 @@ fn app(terminal: &mut DefaultTerminal) -> std::io::Result<()> {
                 frame,
                 &mut state,
                 &mut tree_state,
-                choose_path_toogle,
                 show_editor,
                 preview_mode,
             )
@@ -89,7 +88,6 @@ fn app(terminal: &mut DefaultTerminal) -> std::io::Result<()> {
                                 frame,
                                 &mut state,
                                 &mut tree_state,
-                                choose_path_toogle,
                                 show_editor,
                                 preview_mode,
                             )
@@ -108,7 +106,6 @@ fn app(terminal: &mut DefaultTerminal) -> std::io::Result<()> {
                                         frame,
                                         &mut state,
                                         &mut tree_state,
-                                        choose_path_toogle,
                                         show_editor,
                                         preview_mode,
                                     )
@@ -153,7 +150,6 @@ fn render(
     frame: &mut Frame,
     state: &mut EditorState,
     tree_state: &mut TreeState<&str>,
-    _choose_path_toogle: bool,
     show_editor: bool,
     preview_mode: bool,
 ) {
@@ -166,7 +162,6 @@ fn render(
 
     let items = vec![item, item2];
 
-    //if choose_path_toogle {
     let tree_widget = Tree::new(&items)
         .expect("all item identifiers are unique")
         .highlight_style(Style::default().fg(Color::Black).bg(Color::White))
@@ -174,7 +169,6 @@ fn render(
         .block(Block::bordered().title("Tree Widget"));
     frame.render_stateful_widget(tree_widget, left, tree_state);
 
-    //}
     if show_editor {
         if !preview_mode {
             let border_area = Block::bordered()
