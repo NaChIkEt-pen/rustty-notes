@@ -1,6 +1,9 @@
 #![allow(clippy::collapsible_if)]
+#![allow(clippy::needless_borrow)]
+
 use std::{collections::HashMap, fs};
 
+use clap::Parser;
 use edtui::{
     EditorEventHandler, EditorState, EditorTheme, EditorView, LineNumbers, SyntaxHighlighter,
 };
@@ -12,13 +15,17 @@ use ratatui::{
 };
 use tui_tree_widget::{Tree, TreeItem, TreeState};
 
-#[derive(PartialEq)]
-enum Focus {
-    Editor,
-    Tree,
-}
+mod utils;
+use utils::{Args, Focus};
 
 fn main() -> color_eyre::Result<()> {
+    let args = Args::parse();
+    let path = args.path.unwrap_or_else(|| std::path::PathBuf::from("."));
+
+    //  for entry in fs::read_dir(path)? {
+    //      let dir = entry?;
+    //      println!("{:?}, is dir {:?}", dir.path(), dir.path().is_dir());
+    //  }
     color_eyre::install()?;
     ratatui::run(app)?;
     Ok(())
@@ -35,9 +42,7 @@ fn app(terminal: &mut DefaultTerminal) -> std::io::Result<()> {
     let mut show_editor = false;
     let mut preview_mode = false;
     loop {
-        let mut state = editor_states
-            .entry(current_tree_key)
-            .or_insert_with(EditorState::default);
+        let mut state = editor_states.entry(current_tree_key).or_default();
 
         terminal.draw(|frame| {
             render(
